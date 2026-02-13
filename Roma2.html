@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <title>Dashboard Dinamica - Caso Studio Roma</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body { margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #fdfdfd; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    
+    #header {
+      background: #991b1b;
+      color: white;
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      z-index: 1001;
+    }
+
+    #controls {
+      padding: 10px 20px;
+      background: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      border-bottom: 1px solid #ddd;
+      z-index: 1001;
+    }
+
+    .map-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: 1fr 1fr;
+      flex-grow: 1;
+      gap: 8px;
+      padding: 8px;
+      background: #e2e8f0;
+    }
+
+    .map-frame {
+      border: 1px solid #cbd5e1;
+      position: relative;
+      background: #ffffff;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .map-title {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      background: rgba(255,255,255,0.9);
+      padding: 4px 10px;
+      font-weight: bold;
+      font-size: 11px;
+      z-index: 1000;
+      border-radius: 4px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+      color: #991b1b;
+      text-transform: uppercase;
+      pointer-events: none;
+    }
+
+    .map { width: 100%; height: 100%; }
+
+    /* Legende a Scala Cromatica Continua */
+    #legends-wrapper {
+      background: #fff;
+      padding: 15px 30px;
+      border-top: 1px solid #ddd;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      z-index: 1001;
+      height: 85px;
+    }
+
+    .legend-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 25%;
+    }
+
+    .legend-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .color-scale-container {
+      width: 100%;
+      height: 16px;
+      border-radius: 4px;
+      overflow: hidden;
+      background: #f1f5f9;
+      position: relative;
+      border: 1px solid #cbd5e1;
+      box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+    }
+
+    .legend-img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      /* Assicura che l'immagine riempia il contenitore per un effetto continuo */
+      object-fit: fill; 
+    }
+
+    .legend-range {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      font-size: 10px;
+      color: #475569;
+      margin-top: 5px;
+      font-weight: 600;
+    }
+
+    .control-group { display: flex; align-items: center; gap: 10px; }
+    
+    button {
+      padding: 6px 14px;
+      cursor: pointer;
+      border: 1px solid #991b1b;
+      border-radius: 4px;
+      background: white;
+      color: #991b1b;
+      font-weight: bold;
+      transition: all 0.2s;
+    }
+
+    button:hover { background: #fee2e2; }
+    button#playBtn.active { background: #991b1b; color: white; }
+
+    input[type='range'] { width: 250px; cursor: pointer; }
+    #selected-hour { font-weight: bold; color: #991b1b; font-size: 1.3em; min-width: 30px; display: inline-block; }
+  </style>
+</head>
+<body>
+
+  <div id="header">
+    <strong>MIRIFICUS: Dashboard Roma</strong>
+    <span>Visualizzazione Scientifica - Legende Continue</span>
+  </div>
+
+  <div id="controls">
+    <div class="control-group">
+      <button id="playBtn">▶ Play</button>
+      <button id="stopBtn">⏸ Stop</button>
+    </div>
+    <div class="control-group">
+      <label for="hourRange">Seleziona Ora:</label>
+      <input type="range" id="hourRange" min="0" max="24" value="0" step="3" />
+      <div><span id="selected-hour">00</span>:00</div>
+    </div>
+  </div>
+
+  <div class="map-grid">
+    <div class="map-frame"><div class="map-title">ST ANTE</div><div id="map-st-ante" class="map"></div></div>
+    <div class="map-frame"><div class="map-title">T ANTE</div><div id="map-t-ante" class="map"></div></div>
+    <div class="map-frame"><div class="map-title">UTCI ANTE</div><div id="map-utci-ante" class="map"></div></div>
+    <div class="map-frame"><div class="map-title">ST POST</div><div id="map-st-post" class="map"></div></div>
+    <div class="map-frame"><div class="map-title">T POST</div><div id="map-t-post" class="map"></div></div>
+    <div class="map-frame"><div class="map-title">UTCI POST</div><div id="map-utci-post" class="map"></div></div>
+  </div>
+
+  <div id="legends-wrapper">
+    <div class="legend-item">
+      <span class="legend-label">Temp. Suolo (ST)</span>
+      <div class="color-scale-container">
+        <img id="leg-st" class="legend-img" alt="ST">
+      </div>
+      <div class="legend-range"><span id="val-st-min">18°C</span><span id="val-st-max">45°C</span></div>
+    </div>
+    <div class="legend-item">
+      <span class="legend-label">Temp. Aria (T)</span>
+      <div class="color-scale-container">
+        <img id="leg-t" class="legend-img" alt="T">
+      </div>
+      <div class="legend-range"><span id="val-t-min">15°C</span><span id="val-t-max">35°C</span></div>
+    </div>
+    <div class="legend-item">
+      <span class="legend-label">Indice Comfort (UTCI)</span>
+      <div class="color-scale-container">
+        <img id="leg-utci" class="legend-img" alt="UTCI">
+      </div>
+      <div class="legend-range"><span id="val-utci-min">Comfort</span><span id="val-utci-max">Stress Forte</span></div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://rawcdn.githack.com/jieter/Leaflet.Sync/master/L.Map.Sync.js"></script>
+  
+  <script>
+    const centerLatLon = [41.932, 12.618];
+    const defaultZoom = 16;
+    const maps = {};
+    const mapIDs = ["map-st-ante", "map-t-ante", "map-utci-ante", "map-st-post", "map-t-post", "map-utci-post"];
+    const wmsUrl = 'https://mirificus.isprambiente.it/geoserver/geonode/wms';
+
+    const layerConfigs = [
+      { id: 'map-st-ante', layerBase: 'geonode:st_ante_roma', stylePrefix: 'st_ante_roma_', legId: 'leg-st' },
+      { id: 'map-st-post', layerBase: 'geonode:st_post_roma', stylePrefix: 'st_post_roma_', legId: null },
+      { id: 'map-t-ante', layerBase: 'geonode:t_ante_roma', stylePrefix: 't_ante_roma_', legId: 'leg-t' },
+      { id: 'map-t-post', layerBase: 'geonode:t_post_roma', stylePrefix: 't_post_roma_', legId: null },
+      { id: 'map-utci-ante', layerBase: 'geonode:utci_ante_roma', stylePrefix: 'utci_ante_roma_', legId: 'leg-utci' },
+      { id: 'map-utci-post', layerBase: 'geonode:utci_post_roma', stylePrefix: 'utci_post_roma_', legId: null }
+    ];
+
+    const activeWMSLayers = {};
+    let playInterval = null;
+
+    mapIDs.forEach(id => {
+        maps[id] = L.map(id, { center: centerLatLon, zoom: defaultZoom, zoomControl: id === 'map-st-ante', attributionControl: false });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(maps[id]);
+    });
+
+    const mapList = Object.values(maps);
+    mapList.forEach(m1 => mapList.forEach(m2 => { if(m1 !== m2) m1.sync(m2); }));
+
+    function updateLegendValues(hour) {
+        const isDay = hour >= 9 && hour <= 18;
+        if (isDay) {
+            document.getElementById('val-st-min').textContent = "28°C";
+            document.getElementById('val-st-max').textContent = "52°C";
+            document.getElementById('val-t-min').textContent = "24°C";
+            document.getElementById('val-t-max').textContent = "38°C";
+            document.getElementById('val-utci-min').textContent = "Moderato";
+            document.getElementById('val-utci-max').textContent = "Estremo";
+        } else {
+            document.getElementById('val-st-min').textContent = "16°C";
+            document.getElementById('val-st-max').textContent = "24°C";
+            document.getElementById('val-t-min').textContent = "14°C";
+            document.getElementById('val-t-max').textContent = "22°C";
+            document.getElementById('val-utci-min').textContent = "Comfort";
+            document.getElementById('val-utci-max').textContent = "Fresco";
+        }
+    }
+
+    function updateAllLayers(hourVal) {
+        const styleHour = (hourVal == 24) ? 0 : hourVal;
+        const hourStr = String(styleHour).padStart(2, '0');
+        
+        document.getElementById('selected-hour').textContent = String(hourVal).padStart(2, '0');
+        document.getElementById('hourRange').value = hourVal;
+
+        updateLegendValues(styleHour);
+
+        layerConfigs.forEach(cfg => {
+            const newStyle = cfg.stylePrefix + hourStr;
+            if (activeWMSLayers[cfg.id]) maps[cfg.id].removeLayer(activeWMSLayers[cfg.id]);
+            activeWMSLayers[cfg.id] = L.tileLayer.wms(wmsUrl, {
+                layers: cfg.layerBase,
+                styles: newStyle,
+                format: 'image/png',
+                transparent: true,
+                version: '1.1.1',
+                zIndex: 10,
+                opacity: 0.8
+            }).addTo(maps[cfg.id]);
+
+            if (cfg.legId) {
+                const legImg = document.getElementById(cfg.legId);
+                /* PARAMETRI PER LEGENDA CONTINUA:
+                   - layout:horizontal -> mette la barra in orizzontale
+                   - colorbar:true -> Forza il disegno della barra di colore continua
+                   - label:false e fontSize:0 -> Rimuove le etichette testuali generate dal server (che userebbero le classi discrete)
+                */
+                const legendUrl = `${wmsUrl}?REQUEST=GetLegendGraphic&VERSION=1.0.0&FORMAT=image/png&LAYER=${cfg.layerBase}&STYLE=${newStyle}&WIDTH=300&HEIGHT=20&LEGEND_OPTIONS=layout:horizontal;colorbar:true;label:false;fontSize:0;forceRule:true;hideEmptyRules:true`;
+                legImg.src = legendUrl;
+            }
+        });
+    }
+
+    document.getElementById('playBtn').onclick = function() {
+        if (playInterval) return;
+        this.classList.add('active');
+        playInterval = setInterval(() => {
+            let nextHour = (parseInt(document.getElementById('hourRange').value) + 3);
+            if (nextHour > 24) nextHour = 0;
+            updateAllLayers(nextHour);
+        }, 2000);
+    };
+
+    document.getElementById('stopBtn').onclick = function() {
+        clearInterval(playInterval);
+        playInterval = null;
+        document.getElementById('playBtn').classList.remove('active');
+    };
+
+    document.getElementById('hourRange').oninput = (e) => {
+        if (playInterval) document.getElementById('stopBtn').click();
+        updateAllLayers(e.target.value);
+    };
+
+    window.onload = () => updateAllLayers(0);
+  </script>
+</body>
+</html>
